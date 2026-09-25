@@ -176,7 +176,7 @@ int main(void){
     }
     enum{
         PC_START = 0x3000
-    }
+    };
     registers[pc] = PC_START; // program will start from memory address 0x3000
                               // because the user space will be starting from memory address
                               // 0x3000
