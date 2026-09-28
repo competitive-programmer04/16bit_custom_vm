@@ -37,10 +37,18 @@ enum{
     psr, // processor status register
 };
 
+enum{
+    TRAP_GETC = 0x20,
+    TRAP_OUT = 0x21,
+    TRAP_PUTS = 0x22,
+    TRAP_IN = 0x23,
+    TRAP_PUTSP = 0x24,
+    TRAP_HLT = 0x25
+};
+
 uint16_t registers[NUM_REG];
 uint16_t memory[NUM_ADDR]; // word addressable i.e. each memory address will be pointing to 16 bit word
 uint16_t sign_extend(uint16_t x, uint16_t bit_count);
 void set_condition_code(uint16_t reg);
 void fetch_decode_execute();
 #endif
-

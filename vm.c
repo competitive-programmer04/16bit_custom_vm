@@ -1,4 +1,4 @@
-#include<stdio.h>
+#include<unistd.h>
 #include<stdint.h>
 #include"vm.h"
 
@@ -157,12 +157,88 @@ void fetch_decode_execute(){
             memory[registers[base_r]+pc_offset_6] = registers[sr];
             break;
         }
-        case OP_RTI:
-            //TODO
+        case OP_RTI:{
+            if((registers[psr]>>15)&1){
+                char *mesg = "Privilege mode violation. Cannot execute RTI in user mode\n";
+                size_t len = 0;
+                while(mesg[len] != '\n'){
+                    len++;
+                }
+                write(STDOUT_FILENO, mesg, len+1);
+                running = 0;
+            }
             break;
-        case OP_TRAP:
-            running = 0;
-            break;
+        }
+        case OP_TRAP:{
+            registers[r7] = registers[pc];
+            uint16_t trapvect8 = ins&0xFF;
+            switch(trapvect8){
+                case TRAP_GETC:{
+                    uint8_t ch;
+                    read(STDIN_FILENO, &ch, 1);
+                    registers[r0] = ch;
+                    set_condition_code(registers[r0]);
+                    break;
+                }
+                case TRAP_OUT:{
+                    char ch = registers[r0]&0xFF;
+                    write(STDOUT_FILENO, &ch, 1);
+                    break;
+                }
+                case TRAP_PUTS:{
+                   uint16_t addr = registers[r0];
+                   uint16_t val = memory[addr];
+                   while(val != 0x0000){
+                       char ch= val&0xFF;
+                       write(STDOUT_FILENO, &ch, 1);
+                       val = memory[++addr];
+                   }
+                   break;
+                }
+                case TRAP_IN:{
+                   char *str = "Print a character on the screen\n";
+                   size_t len =0;
+                   while(str[len] != '\n'){
+                       len++;
+                   }
+                   write(STDOUT_FILENO, str, len+1);
+                   uint8_t ch;
+                   read(STDIN_FILENO, &ch, 1);
+                   registers[r0] = ch;
+                   set_condition_code(registers[r0]);
+                   write(STDOUT_FILENO, &ch, 1);
+                   break;
+                }
+                case TRAP_PUTSP:{
+                   uint16_t addr = registers[r0];
+                   uint16_t val_l = memory[addr]&0xFF;
+                   uint16_t val_h = (memory[addr]>>8)&0xFF;
+                   while(memory[addr] != 0x0000){
+                       char ch1 = val_l;
+                       write(STDOUT_FILENO, &ch1, 1);
+                       if(val_h == 0x00) break;
+                       char ch2 = val_h;
+                       write(STDOUT_FILENO, &ch2, 1);
+                       val_l = memory[++addr]&0xFF;
+                       val_h = (memory[addr]>>8)&0xFF;
+                   }
+                   break;
+                }
+                case TRAP_HLT:{
+                   running = 0;
+                   break;
+                }
+                default:{
+                   char *mesg = "Invalid trap vector 8 bit\n";
+                   size_t len = 0;
+                   while(mesg[len] != '\n'){
+                       len++;
+                   }
+                   write(STDOUT_FILENO, mesg, len+1);
+                   break;
+              }
+            }
+        }
     }
     return;
 }
