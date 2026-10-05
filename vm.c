@@ -70,7 +70,6 @@ uint16_t mem_read(uint16_t addr){
     }
 }
 
-
 void mem_write(uint16_t addr, uint16_t val){
     memory[addr] = val;
     return;

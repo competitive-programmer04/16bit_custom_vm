@@ -1,5 +1,6 @@
 #ifndef __VM__H__
 #define __VM__H__
+#include<stdint.h>
 #define NUM_REG 10
 #define NUM_ADDR (1<<16)
 
