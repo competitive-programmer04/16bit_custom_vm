@@ -46,7 +46,6 @@ int check_key_press(){
                        1 -> file descriptors are ready for reading or writing
                        -1 -> error
      */
-    return;
 }
 
 uint16_t mem_read(uint16_t addr){

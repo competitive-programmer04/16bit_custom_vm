@@ -15,6 +15,54 @@ const char *my_string[] =  {
     };
     int my_string_size = 35;
 
+int parse_reg(char *str){
+    if(!str || *str == '\0'){
+        fprintf(stderr, "Pass the register in correct format\n");
+        return -1;
+    }
+    else if(strlen(str) != 2){
+        fprintf(stderr, "available general purpose registers are r0/R0, r1/R1 ..... r7/R7. Don't use any other\n");
+        return -1;
+    }
+    int reg_num = str[1] - '0';
+    return reg_num;
+}
+
+int parse_imm(char *str, int *out_val){
+    if(!str || *str == '\0') return 0;
+    while(*str == ' ' || *str == '\t'){
+        str++;
+    }
+    char *endptr;
+    long val;
+    // for decimal like #10
+    if(*str == '#'){
+        val = strtol(str+1, &endptr, 10);
+    }
+    // for hexadecimal like 0x0016 or 0X0025
+    else if(strncmp(str, "0x",2) == 0 || strncmp(str, "0X", 2) == 0){
+        val = strtol(str, &endptr, 16);
+    }
+    // also for hexadecimal
+    else if(strncmp(str, "x", 1) == 0 || strncmp(str, "X", 1) == 0){
+        val = strtol(str, &endptr, 16);
+    }
+    // for decimal
+    else{
+        val = strtol(str, &endptr, 10);
+    }
+    if(str == endptr){
+        fprintf(stderr, "some error occurred in parsing. Cannot parse the value to integer\n");
+        return -1;
+    }
+    if(val > INT16_MAX){
+        fprintf(stderr, "maximum allowed bits are 16. No element can have more than 16 bits\n");
+        return -1;
+    }
+    *out_val = (int)val;
+    return 0;
+}
+
 void init_symbol_table(SymbolTable *st){
     memset(st->my_symbol, 0, sizeof(st->my_symbol));
     st->count = 0;
