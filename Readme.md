@@ -146,7 +146,7 @@ To clean all the object files
 make clean
 ```
 
-### Usage and workflow
+## Usage and workflow
 First compile the assembler.c and vm.c files
 ```bash
 make
