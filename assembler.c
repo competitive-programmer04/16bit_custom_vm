@@ -1,45 +1,50 @@
-#include <endian.h>
 #include <iso646.h>
-#include<stdio.h>
-#include<stdlib.h>
-#include<string.h>
-#include<stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
 #include <sys/types.h>
-#include"assembler.h"
+#include "assembler.h"
 #define MAX_LINE_SIZE 512
 
 uint16_t addr_counter = 0;
 
-const char *my_string[] =  {
-        "ADD", "AND", "NOT", "BR", "BRN", "BRZ", "BRP", "BRNZ", "BRNP", "BRZP", "BRNZP",
-        "JMP", "RET", "JSR", "JSRR", "LD", "LDI", "LDR", "LEA", "ST", "STI", "STR",
-        "TRAP", "GETC", "OUT", "PUTS", "IN", "PUTSP", "HALT", "RTI",
-        ".ORIG", ".FILL", ".BLKW", ".STRINGZ", ".END",
-    };
-    int my_string_size = 35;
+const char *my_string[] = {
+    "ADD", "AND", "NOT", "BR", "BRN", "BRZ", "BRP", "BRNZ", "BRNP", "BRZP", "BRNZP",
+    "JMP", "RET", "JSR", "JSRR", "LD", "LDI", "LDR", "LEA", "ST", "STI", "STR",
+    "TRAP", "GETC", "OUT", "PUTS", "IN", "PUTSP", "HALT", "RTI",
+    ".ORIG", ".FILL", ".BLKW", ".STRINGZ", ".END",
+};
+int my_string_size = 35;
 
-    const char* my_registers[] = {"r0", "R0", "r1", "R1", "r2", "R2", "r3", "R3", "r4", "R4", "r5", "R5", "r6", "R6", "r7", "R7"};
+const char* my_registers[] = {"r0", "R0", "r1", "R1", "r2", "R2", "r3", "R3", "r4", "R4", "r5", "R5", "r6", "R6", "r7", "R7"};
 
-    enum {
-        OP_BR = 0x0,
-        OP_ADD = 0x1,
-        OP_LD = 0x2,
-        OP_ST = 0x3,
-        OP_JSR = 0x4,
-        OP_JSRR = 0x4,
-        OP_AND = 0x5,
-        OP_LDR = 0x6,
-        OP_STR = 0x7,
-        OP_RTI = 0x8,
-        OP_NOT = 0x9,
-        OP_LDI = 0xA,
-        OP_STI = 0xB,
-        OP_JMP = 0xC,
-        OP_RET = 0xC,
-        OP_ILL = 0xD,
-        OP_LEA = 0xE,
-        OP_TRAP = 0xF
-    };
+enum {
+    OP_BR = 0x0,
+    OP_ADD = 0x1,
+    OP_LD = 0x2,
+    OP_ST = 0x3,
+    OP_JSR = 0x4,
+    OP_JSRR = 0x4,
+    OP_AND = 0x5,
+    OP_LDR = 0x6,
+    OP_STR = 0x7,
+    OP_RTI = 0x8,
+    OP_NOT = 0x9,
+    OP_LDI = 0xA,
+    OP_STI = 0xB,
+    OP_JMP = 0xC,
+    OP_RET = 0xC,
+    OP_ILL = 0xD,
+    OP_LEA = 0xE,
+    OP_TRAP = 0xF
+};
+
+// Helper: writes word in Big-Endian so the VM can read it
+static void write_word(FILE *fp, uint16_t val) {
+    uint16_t be = (val << 8) | (val >> 8);
+    fwrite(&be, sizeof(uint16_t), 1, fp);
+}
 
 uint16_t parse_reg(char *str){
     if(!str || *str == '\0'){
@@ -50,6 +55,8 @@ uint16_t parse_reg(char *str){
         fprintf(stderr, "available general purpose registers are r0/R0, r1/R1 ..... r7/R7. Don't use any other\n");
         return 8;
     }
+    if (str[0] != 'r' && str[0] != 'R') return 8; // FIX: Ensure first char is 'r' or 'R'
+    if (str[1] < '0' || str[1] > '7') return 8;
     uint16_t reg_num = str[1] - '0';
     return reg_num;
 }
@@ -71,7 +78,7 @@ int16_t parse_imm(char *str){
     }
     // also for hexadecimal
     else if(strncmp(str, "x", 1) == 0 || strncmp(str, "X", 1) == 0){
-        val = strtol(str, &endptr, 16);
+        val = strtol(str+1, &endptr, 16);
     }
     // for decimal
     else{
@@ -90,8 +97,8 @@ int16_t parse_imm(char *str){
 }
 
 uint16_t encode_instruction(const char *opcode, char *args, uint16_t current_pc, SymbolTable *st, uint16_t line_num){
-    // 1 Branch Instruction
-    if(strstr(opcode, "BR") != NULL){
+    // 1 BRANCH Instruction
+    if(strstr(opcode, "BR") != NULL || strstr(opcode, "br") != NULL){
         uint16_t neg = 0;
         uint16_t zero = 0;
         uint16_t pos = 0;
@@ -110,13 +117,15 @@ uint16_t encode_instruction(const char *opcode, char *args, uint16_t current_pc,
         memcpy(my_label, old_ptr, name_len);
         my_label[name_len] = '\0';
         uint16_t addr = 0;
+        int found = 0;
         for(int i=0; i<st->count; ++i){
             if(strcmp(my_label, st->my_symbol[i].label_name) == 0){
                 addr = st->my_symbol[i].label_addr;
+                found = 1;
                 break;
             }
         }
-        if(addr == 0){
+        if(!found){
             fprintf(stderr, "error on line number: %d. label not found\n", line_num);
             return 0xFFFF;
         }
@@ -125,13 +134,13 @@ uint16_t encode_instruction(const char *opcode, char *args, uint16_t current_pc,
             fprintf(stderr, "error on line number: %d. Offset should be in the range of -256 and 255\n", line_num);
             return 0xFFFF;
         }
-        if(strcmp(opcode, "BRn") == 0 || strcmp(opcode, "BRnz") == 0 || strcmp(opcode, "BRnp") == 0 || strcmp(opcode, "BRnzp") == 0){
+        if(strcmp(opcode, "BR") == 0 || strcmp(opcode, "BRn") == 0 || strcmp(opcode, "BRnz") == 0 || strcmp(opcode, "BRnp") == 0 || strcmp(opcode, "BRnzp") == 0){
             neg = 0x1<<11;
         }
-        if(strcmp(opcode, "BRz") == 0 || strcmp(opcode, "BRzp") == 0 || strcmp(opcode, "BRnz") == 0 || strcmp(opcode, "BRnzp") == 0){
+        if(strcmp(opcode, "BR") == 0 || strcmp(opcode, "BRz") == 0 || strcmp(opcode, "BRzp") == 0 || strcmp(opcode, "BRnz") == 0 || strcmp(opcode, "BRnzp") == 0){
             zero = 0x1<<10;
         }
-        if(strcmp(opcode, "BRp") == 0 || strcmp(opcode, "BRnp") == 0 || strcmp(opcode, "BRzp") == 0 || strcmp(opcode, "BRnzp") == 0){
+        if(strcmp(opcode, "BR") == 0 || strcmp(opcode, "BRp") == 0 || strcmp(opcode, "BRnp") == 0 || strcmp(opcode, "BRzp") == 0 || strcmp(opcode, "BRnzp") == 0){
             pos = 0x1<<9;
         }
         uint16_t ins = (OP_BR<<12)|neg|zero|pos|(pcoffset9 & 0x1FF);
@@ -149,8 +158,8 @@ uint16_t encode_instruction(const char *opcode, char *args, uint16_t current_pc,
             fprintf(stderr, "error on line number: %d. Please pass destination register.\n", line_num);
             return 0xFFFF;
         }
-        char my_args[name_len+1];
-        memset(my_args, 0, name_len);
+        char my_args[MAX_LINE_SIZE]; 
+        memset(my_args, 0, sizeof(my_args));
         memcpy(my_args, old_ptr, name_len);
         my_args[name_len] = '\0';
         uint16_t des = parse_reg(my_args);
@@ -170,12 +179,14 @@ uint16_t encode_instruction(const char *opcode, char *args, uint16_t current_pc,
             fprintf(stderr, "error on line number: %d. Please pass first source register\n", line_num);
             return 0xFFFF;
         }
+        memset(my_args, 0, sizeof(my_args));
         memcpy(my_args, old_ptr, name_len);
+        my_args[name_len] = '\0';
         uint16_t src1 = parse_reg(my_args);
         if(src1 >= 8){
             return 0xFFFF;
         }
-        while(*args == ' ' || *args != ','){
+        while(*args == ' ' || *args ==','){
             args++;
         }
         old_ptr = args;
@@ -229,8 +240,8 @@ uint16_t encode_instruction(const char *opcode, char *args, uint16_t current_pc,
             fprintf(stderr, "error on line number: %d. Please pass destination register\n", line_num);
             return 0xFFFF;
         }
-        char my_args[name_len+1];
-        memset(my_args, 0, name_len);
+        char my_args[MAX_LINE_SIZE]; 
+        memset(my_args, 0, sizeof(my_args));
         memcpy(my_args, old_ptr, name_len);
         my_args[name_len] = '\0';
         uint16_t des = parse_reg(my_args);
@@ -238,7 +249,7 @@ uint16_t encode_instruction(const char *opcode, char *args, uint16_t current_pc,
             fprintf(stderr, "error on line number: %d. Please pass the destination register\n", line_num);
             return 0xFFFF;
         }
-        while(*args == ' ' || *args != ','){
+        while(*args == ' ' || *args == ','){
             args++;
         }
         old_ptr = args;
@@ -251,7 +262,9 @@ uint16_t encode_instruction(const char *opcode, char *args, uint16_t current_pc,
             fprintf(stderr, "error on line number: %d. Please pass the first source register\n", line_num);
             return 0xFFFF;
         }
+        memset(my_args, 0, sizeof(my_args));
         memcpy(my_args, old_ptr, name_len);
+        my_args[name_len] = '\0';
         uint16_t src1 = parse_reg(my_args);
         if(src1 >= 8){
             fprintf(stderr, "error on line number: %d. Please pass the source register one in correct format\n", line_num);
@@ -312,8 +325,8 @@ uint16_t encode_instruction(const char *opcode, char *args, uint16_t current_pc,
             fprintf(stderr, "error on line number: %d. Please pass the destination register\n", line_num);
             return 0xFFFF;
         }
-        char my_args[name_len+1];
-        memset(my_args, 0, name_len);
+        char my_args[MAX_LINE_SIZE];
+        memset(my_args, 0, sizeof(my_args));
         memcpy(my_args, old_ptr, name_len);
         my_args[name_len] = '\0';
         uint16_t des = parse_reg(my_args);
@@ -321,7 +334,7 @@ uint16_t encode_instruction(const char *opcode, char *args, uint16_t current_pc,
             fprintf(stderr, "error on line number: %d. Pass the destination register in correct format\n", line_num);
             return 0xFFFF;
         }
-        while(*args == ' ' || *args != ','){
+        while(*args == ' ' || *args == ','){
             args++;
         }
         old_ptr = args;
@@ -334,14 +347,15 @@ uint16_t encode_instruction(const char *opcode, char *args, uint16_t current_pc,
             fprintf(stderr, "error on line number: %d. Pass the source register\n", line_num);
             return 0xFFFF;
         }
+        memset(my_args, 0, sizeof(my_args));
         memcpy(my_args, old_ptr, name_len);
-        my_args[name_len+1] = '\0';
+        my_args[name_len] = '\0'; 
         uint16_t src = parse_reg(my_args);
-        if( src >= 8){
+        if(src >= 8){
             fprintf(stderr, "error on line number: %d. Pass the source register in correct way\n", line_num);
             return 0xFFFF;
         }
-        uint16_t ins = (OP_NOT<<12)|((des&0x7)<<9)|((src&0x7)<<6);
+        uint16_t ins = (OP_NOT<<12)|((des&0x7)<<9)|((src&0x7)<<6)|0x3F; // FIX: added | 0x3F per spec
         return ins;
     }
     // 5 JSR Instruction
@@ -359,15 +373,17 @@ uint16_t encode_instruction(const char *opcode, char *args, uint16_t current_pc,
         char name[name_len+1];
         memset(name, 0, name_len);
         memcpy(name, old_ptr, name_len);
-        name[name_len+1] = '\0';
+        name[name_len] = '\0'; // FIX: was name_len + 1
         uint16_t addr = 0;
+        int found = 0;
         for(int i=0; i<st->count; ++i){
             if(strcmp(name, st->my_symbol[i].label_name) == 0){
                 addr = st->my_symbol[i].label_addr;
+                found = 1;
                 break;
             }
         }
-        if(addr == 0){
+        if(!found){
             fprintf(stderr, "error on line number: %d. Label not found in the symbol table\n", line_num);
             return 0xFFFF;
         }
@@ -404,7 +420,7 @@ uint16_t encode_instruction(const char *opcode, char *args, uint16_t current_pc,
         return ins;
     }
     // 7 JMP Instruction
-   else if(strcmp(opcode, "JMP") == 0){
+    else if(strcmp(opcode, "JMP") == 0){
         char *old_ptr = args;
         int name_len = 0;
         while(*args != '\n' && *args != '\t' && *args != '\0' && *args != ' '){
@@ -424,42 +440,14 @@ uint16_t encode_instruction(const char *opcode, char *args, uint16_t current_pc,
             fprintf(stderr, "error on line number: %d. Register number cannot excced 7\n", line_num);
             return 0xFFFF;
         }
-        else if(base_r == 7){
-            fprintf(stderr, "error on line number. %d. Base register cannot be 7 in JMP instruction\n", line_num);
-            return 0xFFFF;
-        }
         uint16_t ins = (OP_JMP<<12)|((base_r&0x7)<<6);
         return ins;
     }
-   // 8 RET Instruction
-   else if(strcmp(opcode, "RET") == 0){
-        char *old_ptr = args;
-        int name_len = 0;
-        while(*args != '\n' && *args != '\t' && *args != '\0' && *args != ' '){
-            name_len++;
-            args++;
-        }
-        if(name_len == 0){
-            fprintf(stderr, "error on line number: %d. Please pass the register\n", line_num);
-            return 0xFFFF;
-        }
-        char reg_name[name_len+1];
-        memset(reg_name, 0, name_len);
-        memcpy(reg_name, old_ptr, name_len);
-        reg_name[name_len] = '\0';
-        uint16_t base_r = parse_reg(reg_name);
-        if(base_r >= 8){
-            fprintf(stderr, "error on line number: %d. Register number cannot excced 7\n", line_num);
-            return 0xFFFF;
-        }
-        else if(base_r != 7){
-            fprintf(stderr, "error on line number. %d. Base register should be 7 in ret instruction\n", line_num);
-            return 0xFFFF;
-        }
-        uint16_t ins = (OP_JMP<<12)|((base_r&0x7)<<6);
-        return ins;
+    // 8 RET Instruction 
+    else if(strcmp(opcode, "RET") == 0){
+        return 0xC1C0; // JMP R7
     }
-   // 9 LOAD Instruction
+    // 9 LOAD Instruction
     else if(strcmp(opcode, "LD") == 0){
         char *old_ptr = args;
         int name_len = 0;
@@ -498,13 +486,15 @@ uint16_t encode_instruction(const char *opcode, char *args, uint16_t current_pc,
         memcpy(my_label, old_ptr, name_len);
         my_label[name_len] = '\0';
         uint16_t addr = 0;
+        int found = 0;
         for(int i=0; i<st->count; ++i){
             if(strcmp(my_label, st->my_symbol[i].label_name) == 0){
                 addr = st->my_symbol[i].label_addr;
+                found = 1;
                 break;
             }
         }
-        if(addr == 0){
+        if(!found){
             fprintf(stderr, "error on line number: %d. Label does not match with any in the symbol table\n", line_num);
             return 0xFFFF;
         }
@@ -517,7 +507,7 @@ uint16_t encode_instruction(const char *opcode, char *args, uint16_t current_pc,
         return ins;
     }
     // 10 LOAD INDIRECT Instruction
-   else if(strcmp(opcode, "LDI") == 0){
+    else if(strcmp(opcode, "LDI") == 0){
         char *old_ptr = args;
         int name_len = 0;
         while(*args != ',' && *args != '\n' && *args != '\t' && *args != '\0' && *args != ' '){
@@ -555,13 +545,15 @@ uint16_t encode_instruction(const char *opcode, char *args, uint16_t current_pc,
         memcpy(my_label, old_ptr, name_len);
         my_label[name_len] = '\0';
         uint16_t addr = 0;
+        int found = 0;
         for(int i=0; i<st->count; ++i){
             if(strcmp(my_label, st->my_symbol[i].label_name) == 0){
                 addr = st->my_symbol[i].label_addr;
+                found = 1;
                 break;
             }
         }
-        if(addr == 0){
+        if(!found){
             fprintf(stderr, "error on line number: %d. Label doen not match with any in symbol table\n", line_num);
             return 0xFFFF;
         }
@@ -573,8 +565,8 @@ uint16_t encode_instruction(const char *opcode, char *args, uint16_t current_pc,
         uint16_t ins = (OP_LDI<<12)|((des&0x7)<<9)|(pcoffset9&0x1FF);
         return ins;
     }
-   // 11 LDR Instruction
-   else if(strcmp(opcode, "LDR") == 0){
+    // 11 LDR Instruction 
+    else if(strcmp(opcode, "LDR") == 0){
         char *old_ptr = args;
         int name_len = 0;
         while(*args != ',' && *args != '\n' && *args != '\t' && *args != '\0' && *args != ' '){
@@ -607,10 +599,11 @@ uint16_t encode_instruction(const char *opcode, char *args, uint16_t current_pc,
             fprintf(stderr, "error on line number: %d. Missing the base register\n", line_num);
             return 0xFFFF;
         }
-        memset(reg_name, 0, name_len);
-        memcpy(reg_name, old_ptr, name_len);
-        reg_name[name_len] = '\0';
-        uint16_t base_r = parse_reg(reg_name);
+        char base_reg_name[name_len+1];
+        memset(base_reg_name, 0, name_len);
+        memcpy(base_reg_name, old_ptr, name_len);
+        base_reg_name[name_len] = '\0';
+        uint16_t base_r = parse_reg(base_reg_name);
         if(base_r >= 8){
             fprintf(stderr, "errorn line number: %d. Register number cannot exceed 7\n", line_num);
             return 0xFFFF;
@@ -625,25 +618,15 @@ uint16_t encode_instruction(const char *opcode, char *args, uint16_t current_pc,
             args++;
         }
         if(name_len == 0){
-            fprintf(stderr, "error on line number: %d. Missing label in LDR instruction\n", line_num);
+            fprintf(stderr, "error on line number: %d. Missing offset in LDR instruction\n", line_num);
             return 0xFFFF;
         }
-        char my_label[name_len+1];
-        memset(my_label, 0, name_len);
-        memcpy(my_label, old_ptr, name_len);
-        my_label[name_len] = '\0';
-        uint16_t addr = 0;
-        for(int i=0; i<st->count; ++i){
-            if(strcmp(my_label, st->my_symbol[i].label_name) == 0){
-                addr = st->my_symbol[i].label_addr;
-                break;
-            }
-        }
-        if(addr == 0){
-            fprintf(stderr, "error on line number: %d. Label does not match with any in symbol table\n", line_num);
-            return 0xFFFF;
-        }
-        int16_t pcoffset6 = addr - (current_pc + 1);
+        char my_offset_str[name_len+1];
+        memset(my_offset_str, 0, name_len);
+        memcpy(my_offset_str, old_ptr, name_len);
+        my_offset_str[name_len] = '\0';
+
+        int16_t pcoffset6 = parse_imm(my_offset_str);
         if(pcoffset6 > 31 || pcoffset6 < -32){
             fprintf(stderr, "error on line number: %d. Offset should be in the range of -32 to 31\n", line_num);
             return 0xFFFF;
@@ -651,8 +634,8 @@ uint16_t encode_instruction(const char *opcode, char *args, uint16_t current_pc,
         uint16_t ins = (OP_LDR<<12)|((des&0x7)<<9)|((base_r&0x7)<<6)|(pcoffset6&0x3F);
         return ins;
     }
-   // 12 STORE Instruction
-   else if(strcmp(opcode, "ST") == 0){
+    // 12 STORE Instruction
+    else if(strcmp(opcode, "ST") == 0){
         char *old_ptr = args;
         int name_len = 0;
         while(*args != ',' && *args != '\n' && *args != '\t' && *args != '\0' && *args != ' '){
@@ -690,13 +673,15 @@ uint16_t encode_instruction(const char *opcode, char *args, uint16_t current_pc,
         memcpy(my_label, old_ptr, name_len);
         my_label[name_len] = '\0';
         uint16_t addr = 0;
+        int found = 0;
         for(int i=0; i<st->count; ++i){
             if(strcmp(my_label, st->my_symbol[i].label_name) == 0){
                 addr = st->my_symbol[i].label_addr;
+                found = 1;
                 break;
             }
         }
-        if(addr == 0){
+        if(!found){
             fprintf(stderr, "error on line number: %d. Label does not match with any in symbol table\n", line_num);
             return 0xFFFF;
         }
@@ -708,7 +693,7 @@ uint16_t encode_instruction(const char *opcode, char *args, uint16_t current_pc,
         uint16_t ins = (OP_ST<<12)|((src&0x7)<<9)|(pcoffset9&0x1FF);
         return ins;
     }
-   // 13 STORE INDIRECT Instruction
+    // 13 STORE INDIRECT Instruction
     else if(strcmp(opcode, "STI") == 0){
         char *old_ptr = args;
         int name_len = 0;
@@ -747,13 +732,15 @@ uint16_t encode_instruction(const char *opcode, char *args, uint16_t current_pc,
         memcpy(my_label, old_ptr, name_len);
         my_label[name_len] = '\0';
         uint16_t addr = 0;
+        int found = 0;
         for(int i=0; i<st->count; ++i){
             if(strcmp(my_label, st->my_symbol[i].label_name) == 0){
                 addr = st->my_symbol[i].label_addr;
+                found = 1;
                 break;
             }
         }
-        if(addr == 0){
+        if(!found){
             fprintf(stderr, "error on line number: %d. Label doen not match with any in symbol table\n", line_num);
             return 0xFFFF;
         }
@@ -765,8 +752,8 @@ uint16_t encode_instruction(const char *opcode, char *args, uint16_t current_pc,
         uint16_t ins = (OP_STI<<12)|((src&0x7)<<9)|(pcoffset9&0x1FF);
         return ins;
     }
-    // 14 STR Instruction
-   else if(strcmp(opcode, "STR") == 0){
+    // 14 STR Instruction 
+    else if(strcmp(opcode, "STR") == 0){
         char *old_ptr = args;
         int name_len = 0;
         while(*args != ',' && *args != '\n' && *args != '\t' && *args != '\0' && *args != ' '){
@@ -799,10 +786,11 @@ uint16_t encode_instruction(const char *opcode, char *args, uint16_t current_pc,
             fprintf(stderr, "error on line number: %d. Missing the base register\n", line_num);
             return 0xFFFF;
         }
-        memset(reg_name, 0, name_len);
-        memcpy(reg_name, old_ptr, name_len);
-        reg_name[name_len] = '\0';
-        uint16_t base_r = parse_reg(reg_name);
+        char base_reg_name[name_len+1];
+        memset(base_reg_name, 0, name_len);
+        memcpy(base_reg_name, old_ptr, name_len);
+        base_reg_name[name_len] = '\0';
+        uint16_t base_r = parse_reg(base_reg_name);
         if(base_r >= 8){
             fprintf(stderr, "error on line number: %d. Register number cannot exceed 7\n", line_num);
             return 0xFFFF;
@@ -817,25 +805,15 @@ uint16_t encode_instruction(const char *opcode, char *args, uint16_t current_pc,
             args++;
         }
         if(name_len == 0){
-            fprintf(stderr, "error on line number: %d. Missing label in STR instruction\n", line_num);
+            fprintf(stderr, "error on line number: %d. Missing offset in STR instruction\n", line_num);
             return 0xFFFF;
         }
-        char my_label[name_len+1];
-        memset(my_label, 0, name_len);
-        memcpy(my_label, old_ptr, name_len);
-        my_label[name_len] = '\0';
-        uint16_t addr = 0;
-        for(int i=0; i<st->count; ++i){
-            if(strcmp(my_label, st->my_symbol[i].label_name) == 0){
-                addr = st->my_symbol[i].label_addr;
-                break;
-            }
-        }
-        if(addr == 0){
-            fprintf(stderr, "error on line number: %d. Label does not match with any in symbol table\n", line_num);
-            return 0xFFFF;
-        }
-        int16_t pcoffset6 = addr - (current_pc + 1);
+        char my_offset_str[name_len+1];
+        memset(my_offset_str, 0, name_len);
+        memcpy(my_offset_str, old_ptr, name_len);
+        my_offset_str[name_len] = '\0';
+
+        int16_t pcoffset6 = parse_imm(my_offset_str);
         if(pcoffset6 > 31 || pcoffset6 < -32){
             fprintf(stderr, "error on line number: %d. Offset should be in the range of -32 to 31\n", line_num);
             return 0xFFFF;
@@ -843,7 +821,7 @@ uint16_t encode_instruction(const char *opcode, char *args, uint16_t current_pc,
         uint16_t ins = (OP_STR<<12)|((src&0x7)<<9)|((base_r&0x7)<<6)|(pcoffset6&0x3F);
         return ins;
     }
-   // 15 LEA Instruction
+    // 15 LEA Instruction
     else if(strcmp(opcode, "LEA") == 0){
         char *old_ptr = args;
         int name_len = 0;
@@ -882,13 +860,15 @@ uint16_t encode_instruction(const char *opcode, char *args, uint16_t current_pc,
         memcpy(my_label, old_ptr, name_len);
         my_label[name_len] = '\0';
         uint16_t addr = 0;
+        int found = 0;
         for(int i=0; i<st->count; ++i){
             if(strcmp(my_label, st->my_symbol[i].label_name) == 0){
                 addr = st->my_symbol[i].label_addr;
+                found = 1;
                 break;
             }
         }
-        if(addr == 0){
+        if(!found){
             fprintf(stderr, "error on line number: %d. Label does not match with any in the symbol table\n", line_num);
             return 0xFFFF;
         }
@@ -921,14 +901,14 @@ uint16_t encode_instruction(const char *opcode, char *args, uint16_t current_pc,
     else if(strcmp(opcode, "PUTSP") == 0){
         return 0xF024;
     }
-    else if(strcmp(opcode, "HLT") == 0){
+    else if(strcmp(opcode, "HALT") == 0){
         return 0xF025;
     }
     else{
-        fprintf(stderr, "error on line number: %d. Invalid opcode\n", line_num);
+        fprintf(stderr, "error on line number: %d. %s is Invalid opcode\n", line_num, opcode);
         return 0xFFFF;
     }
- }
+}
 
 void init_symbol_table(SymbolTable *st){
     memset(st->my_symbol, 0, sizeof(st->my_symbol));
@@ -952,7 +932,7 @@ int add_symbol(SymbolTable *st, char *name, uint16_t addr){
     else if(strlen(name) > MAX_LABEL_LEN){
         return -2;
     }
-    else if(st->count > MAX_LABELS){
+    else if(st->count >= MAX_LABELS){ // FIX: >= MAX_LABELS
         return -3;
     }
     memcpy(st->my_symbol[st->count].label_name, name, strlen(name));
@@ -982,13 +962,13 @@ int pass2(SymbolTable *st, FILE *fp_r, FILE *fp_w){
             char *comments = strchr(line_buf, ';');
             if(comments) *comments = '\0';
             char *ptr = line_buf;
-            while(*ptr == ' '){
+            while(*ptr == ' ' || *ptr == '\t'){
                 ptr++;
             }
-            if(*ptr == '\0') continue; // commented line
+            if(*ptr == '\0' || *ptr == '\n' || *ptr == '\r') continue;
             char *old_ptr = ptr;
             uint16_t name_len = 0;
-            while(*ptr != ' ' && *ptr != '\t' && *ptr != '\n' && *ptr != '\0'){
+            while(*ptr != ' ' && *ptr != '\t' && *ptr != '\n' && *ptr != '\r' && *ptr != '\0'){
                 name_len++;
                 ptr++;
             }
@@ -1005,18 +985,18 @@ int pass2(SymbolTable *st, FILE *fp_r, FILE *fp_w){
                 }
             }
             if(!is_check){
-                while(*ptr == ' '){
+                while(*ptr == ' ' || *ptr == '\t'){
                     ptr++;
                 }
                 old_ptr = ptr;
                 name_len = 0;
-                while(*ptr != ' ' && *ptr != '\n' && *ptr != '\t' && *ptr != '\0'){
+                while(*ptr != ' ' && *ptr != '\n' && *ptr != '\t' && *ptr != '\r' && *ptr != '\0'){
                     name_len++;
                     ptr++;
                 }
                 if(name_len == 0){
-                    fprintf(stderr, "error on line number: %d. pass an opcode or a pseudo directive after label\n", line_num);
-                    return -1;
+                    line_num++;
+                    continue; // Label on its own line
                 }
                 char new_name[name_len+1];
                 memset(new_name, 0, name_len);
@@ -1027,12 +1007,12 @@ int pass2(SymbolTable *st, FILE *fp_r, FILE *fp_w){
                     return -1;
                 }
                 else if(strcmp(new_name, ".FILL") == 0){
-                    while(*ptr == ' '){
+                    while(*ptr == ' ' || *ptr == '\t'){
                         ptr++;
                     }
                     old_ptr = ptr;
                     name_len = 0;
-                    while(*ptr != ' ' && *ptr != '\0' && *ptr != '\t' && *ptr != '\n'){
+                    while(*ptr != ' ' && *ptr != '\0' && *ptr != '\t' && *ptr != '\n' && *ptr != '\r'){
                         name_len++;
                         ptr++;
                     }
@@ -1048,23 +1028,23 @@ int pass2(SymbolTable *st, FILE *fp_r, FILE *fp_w){
                     for(int i=0; i<st->count; ++i){
                         if(strcmp(my_value, st->my_symbol[i].label_name) == 0){
                             is_label = 1;
-                            fwrite(&st->my_symbol[i].label_addr, sizeof(uint16_t), 1, fp_w);
+                            write_word(fp_w, st->my_symbol[i].label_addr); 
                             break;
                         }
                     }
                     if(!is_label){
-                        int16_t val = parse_imm(name);
-                        fwrite(&val, sizeof(int16_t), 1, fp_w);
+                        int16_t val = parse_imm(my_value);
+                        write_word(fp_w, (uint16_t)val);
                     }
                     addr_counter = addr_counter + 1;
                 }
                 else if(strcmp(new_name, ".BLKW") == 0){
-                    while(*ptr == ' '){
+                    while(*ptr == ' ' || *ptr == '\t'){
                         ptr++;
                     }
                     old_ptr = ptr;
                     name_len = 0;
-                    while(*ptr != ' ' && *ptr != '\n' && *ptr != '\t' && *ptr != '\0'){
+                    while(*ptr != ' ' && *ptr != '\n' && *ptr != '\t' && *ptr != '\r' && *ptr != '\0'){
                         name_len++;
                         ptr++;
                     }
@@ -1078,27 +1058,25 @@ int pass2(SymbolTable *st, FILE *fp_r, FILE *fp_w){
                     num_words[name_len] = '\0';
                     int16_t val = parse_imm(num_words);
                     for(int i=1; i<=val; ++i){
-                        uint16_t my_num = 0x0000;
-                        fwrite(&my_num, sizeof(uint16_t), 1, fp_w);
+                        write_word(fp_w, 0x0000); // FIX: write_word
                     }
                     addr_counter = addr_counter + val;
                 }
                 else if(strcmp(new_name, ".STRINGZ") == 0){
-                    while(*ptr == ' '){
+                    while(*ptr == ' ' || *ptr == '\t'){
                         ptr++;
                     }
                     char *start_quote = strchr(ptr, '\"');
                     if(start_quote){
-                        char *end_quote = strchr(start_quote, '\"');
+                        char *end_quote = strchr(start_quote + 1, '\"');
                         ptr = start_quote + 1;
                         while(ptr<end_quote){
-                            uint16_t val = *ptr - '0';
-                            fwrite(&val, sizeof(uint16_t), 1, fp_w);
+                            uint16_t val = (uint8_t)(*ptr); 
+                            write_word(fp_w, val);
                             ptr++;
                         }
-                        uint16_t null_terminator = 0x0000;
-                        fwrite(&null_terminator, sizeof(uint16_t), 1, fp_w);
-                        addr_counter = addr_counter + (end_quote-start_quote+1) + 1;
+                        write_word(fp_w, 0x0000);
+                        addr_counter = addr_counter + (end_quote - start_quote);
                     }
                 }
                 else if(strcmp(new_name, ".END") == 0){
@@ -1106,25 +1084,25 @@ int pass2(SymbolTable *st, FILE *fp_r, FILE *fp_w){
                     break;
                 }
                 else{
-                    while(*ptr == ' '){
+                    while(*ptr == ' ' || *ptr == '\t'){
                         ptr++;
                     }
                     uint16_t ins = encode_instruction(new_name, ptr, addr_counter, st, line_num);
                     if(ins == 0xFFFF){
                         return -1;
                     }
-                    fwrite(&ins, sizeof(uint16_t), 1, fp_w);
+                    write_word(fp_w, ins); 
                     addr_counter = addr_counter + 1;
                 }
             }
             else{
                 if(strcmp(name, ".ORIG") == 0){
-                    while(*ptr == ' '){
+                    while(*ptr == ' ' || *ptr == '\t'){
                         ptr++;
                     }
                     old_ptr = ptr;
                     name_len = 0;
-                    while(*ptr != '\n' && *ptr != '\t' && *ptr != '\0' && *ptr != ' '){
+                    while(*ptr != '\n' && *ptr != '\t' && *ptr != '\r' && *ptr != '\0' && *ptr != ' '){
                         name_len++;
                         ptr++;
                     }
@@ -1136,22 +1114,24 @@ int pass2(SymbolTable *st, FILE *fp_r, FILE *fp_w){
                     memset(my_addr, 0, name_len);
                     memcpy(my_addr, old_ptr, name_len);
                     my_addr[name_len] = '\0';
-                    unsigned long addr = strtoul(my_addr, NULL, 16);
+                    char *s = my_addr;
+                    if (*s == 'x' || *s == 'X') s++; // FIX: skip 'x'
+                    unsigned long addr = strtoul(s, NULL, 16);
                     if(addr > UINT16_MAX){
                         fprintf(stderr, "error on line number: %d. Address can not be greater than 16 bits\n", line_num);
                         return -1;
                     }
                     uint16_t orig_addr = (uint16_t)addr;
-                    fwrite(&orig_addr, sizeof(uint16_t), 1, fp_w);
+                    write_word(fp_w, orig_addr);
                     addr_counter = orig_addr;
                 }
                 else if(strcmp(name, ".FILL") == 0){
-                    while(*ptr == ' '){
+                    while(*ptr == ' ' || *ptr == '\t'){
                         ptr++;
                     }
                     old_ptr = ptr;
                     name_len = 0;
-                    while(*ptr != ' ' && *ptr != '\0' && *ptr != '\t' && *ptr != '\n'){
+                    while(*ptr != ' ' && *ptr != '\0' && *ptr != '\t' && *ptr != '\n' && *ptr != '\r'){
                         name_len++;
                         ptr++;
                     }
@@ -1167,23 +1147,23 @@ int pass2(SymbolTable *st, FILE *fp_r, FILE *fp_w){
                     for(int i=0; i<st->count; ++i){
                         if(strcmp(my_value, st->my_symbol[i].label_name) == 0){
                             is_label = 1;
-                            fwrite(&st->my_symbol[i].label_addr, sizeof(uint16_t), 1, fp_w);
+                            write_word(fp_w, st->my_symbol[i].label_addr);
                             break;
                         }
                     }
                     if(!is_label){
-                        int16_t val = parse_imm(name);
-                        fwrite(&val, sizeof(int16_t), 1, fp_w);
+                        int16_t val = parse_imm(my_value);
+                        write_word(fp_w, (uint16_t)val);
                     }
                     addr_counter = addr_counter + 1;
                 }
                 else if(strcmp(name, ".BLKW") == 0){
-                    while(*ptr == ' '){
+                    while(*ptr == ' ' || *ptr == '\t'){
                         ptr++;
                     }
                     old_ptr = ptr;
                     name_len = 0;
-                    while(*ptr != ' ' && *ptr != '\n' && *ptr != '\t' && *ptr != '\0'){
+                    while(*ptr != ' ' && *ptr != '\n' && *ptr != '\t' && *ptr != '\r' && *ptr != '\0'){
                         name_len++;
                         ptr++;
                     }
@@ -1197,27 +1177,25 @@ int pass2(SymbolTable *st, FILE *fp_r, FILE *fp_w){
                     num_words[name_len] = '\0';
                     int16_t val = parse_imm(num_words);
                     for(int i=1; i<=val; ++i){
-                        uint16_t my_num = 0x0000;
-                        fwrite(&my_num, sizeof(uint16_t), 1, fp_w);
+                        write_word(fp_w, 0x0000); 
                     }
                     addr_counter = addr_counter + val;
                 }
                 else if(strcmp(name, ".STRINGZ") == 0){
-                    while(*ptr == ' '){
+                    while(*ptr == ' ' || *ptr == '\t'){
                         ptr++;
                     }
                     char *start_quote = strchr(ptr, '\"');
                     if(start_quote){
-                        char *end_quote = strchr(start_quote, '\"');
+                        char *end_quote = strchr(start_quote + 1, '\"');
                         ptr = start_quote + 1;
                         while(ptr<end_quote){
-                            uint16_t val = *ptr - '0';
-                            fwrite(&val, sizeof(uint16_t), 1, fp_w);
+                            uint16_t val = (uint8_t)(*ptr);
+                            write_word(fp_w, val);
                             ptr++;
                         }
-                        uint16_t null_terminator = 0x0000;
-                        fwrite(&null_terminator, sizeof(uint16_t), 1, fp_w);
-                        addr_counter = addr_counter + (end_quote-start_quote+1) + 1;
+                        write_word(fp_w, 0x0000); // FIX: write_word
+                        addr_counter = addr_counter + (end_quote - start_quote); 
                     }
                 }
                 else if(strcmp(name, ".END") == 0){
@@ -1225,14 +1203,14 @@ int pass2(SymbolTable *st, FILE *fp_r, FILE *fp_w){
                     break;
                 }
                 else{
-                    while(*ptr == ' '){
+                    while(*ptr == ' ' || *ptr == '\t'){
                         ptr++;
                     }
                     uint16_t ins = encode_instruction(name, ptr, addr_counter, st, line_num);
                     if(ins == 0xFFFF){
                         return -1;
                     }
-                    fwrite(&ins, sizeof(uint16_t), 1, fp_w);
+                    write_word(fp_w, ins); 
                     addr_counter = addr_counter + 1;
                 }
             }
@@ -1261,14 +1239,13 @@ int pass1(SymbolTable *st, FILE *fp){
         char *comments = strchr(line_buf, ';');
         if(comments) *comments = '\0';
            char *ptr = line_buf;
-           // trimming of the trailing white spaces
-           while(*ptr == ' '){
+           while(*ptr == ' ' || *ptr == '\t'){
                ptr++;
            }
-           if(*ptr == '\0') continue; // commented line
+           if(*ptr == '\0' || *ptr == '\n' || *ptr == '\r') continue;
            char *old_ptr = ptr;
            uint16_t name_len = 0;
-           while(*ptr != ' '&& *ptr != '\n' && *ptr != '\t' && *ptr != '\0'){
+           while(*ptr != ' '&& *ptr != '\n' && *ptr != '\t' && *ptr != '\r' && *ptr != '\0'){
                name_len++;
                ptr++;
            }
@@ -1299,18 +1276,18 @@ int pass1(SymbolTable *st, FILE *fp){
                    return -1;
                }
                else{
-                   while(*ptr == ' '){
+                   while(*ptr == ' ' || *ptr == '\t'){
                        ptr++;
                    }
                    old_ptr = ptr;
                    name_len = 0;
-                   while(*ptr != ' ' && *ptr != '\n' && *ptr != '\t' && *ptr != '\0'){
+                   while(*ptr != ' ' && *ptr != '\n' && *ptr != '\t' && *ptr != '\r' && *ptr != '\0'){
                        name_len++;
                        ptr++;
                    }
                    if(name_len == 0){
-                       fprintf(stderr, "error on line number: %d. Please pass an opcode or a pseudo directive after label\n", line_num);
-                       return -1;
+                       line_num++;
+                       continue;
                    }
                    char new_name[name_len+1];
                    memset(new_name, 0, name_len);
@@ -1324,12 +1301,12 @@ int pass1(SymbolTable *st, FILE *fp){
                        addr_counter = addr_counter + 1;
                    }
                    else if(strcmp(new_name, ".BLKW")==0){
-                       while(*ptr == ' '){
+                       while(*ptr == ' ' || *ptr == '\t'){
                            ptr++;
                        }
                        old_ptr = ptr;
                        name_len = 0;
-                       while(*ptr != '\n' && *ptr != ' ' && *ptr != '\t' && *ptr != '\0'){
+                       while(*ptr != '\n' && *ptr != ' ' && *ptr != '\t' && *ptr != '\r' && *ptr != '\0'){
                            name_len++;
                            ptr++;
                        }
@@ -1341,19 +1318,11 @@ int pass1(SymbolTable *st, FILE *fp){
                        memset(num_words, 0, name_len);
                        memcpy(num_words, old_ptr, name_len);
                        num_words[name_len] = '\0';
-                       uint16_t offset = 0;
-                       for(int i=0; i<name_len; ++i){
-                        if(num_words[i] == '#') continue;
-                           int mul = 1;
-                           for(int j = 0; j<name_len-1-i; ++j){
-                               mul = mul*10;
-                           }
-                           offset = offset + ((num_words[i]-'0')*mul);
-                       }
+                       int16_t offset = parse_imm(num_words);
                        addr_counter = addr_counter + offset;
                    }
                    else if(strcmp(new_name, ".STRINGZ")==0){
-                       while(*ptr == ' '){
+                       while(*ptr == ' ' || *ptr == '\t'){
                            ptr++;
                        }
                        char *start_quote = strchr(ptr, '\"');
@@ -1368,7 +1337,6 @@ int pass1(SymbolTable *st, FILE *fp){
                        break;
                    }
                    else{
-                       printf("We have encountered an opcode\n");
                        addr_counter = addr_counter + 1;
                    }
                }
@@ -1380,12 +1348,12 @@ int pass1(SymbolTable *st, FILE *fp){
                        printf("error on line number: %d. You can not use origin more than 1 time in ya single file.\n", line_num);
                        return -1;
                    }
-                   while(*ptr == ' '){
+                   while(*ptr == ' ' || *ptr == '\t'){
                        ptr++;
                    }
                    old_ptr = ptr;
                    name_len = 0;
-                   while(*ptr != '\n' && *ptr != ' ' && *ptr != '\t' && *ptr != '\0'){
+                   while(*ptr != '\n' && *ptr != ' ' && *ptr != '\t' && *ptr != '\r' && *ptr != '\0'){
                        name_len++;
                        ptr++;
                    }
@@ -1393,7 +1361,9 @@ int pass1(SymbolTable *st, FILE *fp){
                    memset(orig_addr, 0, name_len);
                    memcpy(orig_addr, old_ptr, name_len);
                    orig_addr[name_len] = '\0';
-                   unsigned long addr = strtoul(orig_addr, NULL, 16);
+                   char *s = orig_addr;
+                   if (*s == 'x' || *s == 'X') s++; // FIX: skip 'x'
+                   unsigned long addr = strtoul(s, NULL, 16);
                    if(addr > UINT16_MAX){
                        printf("error on line number: %d. Memory address cannot be greater than 16 bits.\n", line_num);
                        return -1;
@@ -1405,36 +1375,28 @@ int pass1(SymbolTable *st, FILE *fp){
                    addr_counter = addr_counter + 1;
                }
                else if(strcmp(name, ".BLKW")==0){
-                   while(*ptr == ' '){
+                   while(*ptr == ' ' || *ptr == '\t'){
                        ptr++;
                    }
                    old_ptr = ptr;
                    name_len = 0;
-                   while(*ptr != '\n' && *ptr != ' ' && *ptr != '\t' && *ptr != '\0'){
+                   while(*ptr != '\n' && *ptr != ' ' && *ptr != '\t' && *ptr != '\r' && *ptr != '\0'){ // FIX: was ptr != '\0'
                        name_len++;
                        ptr++;
                    }
                    if(name_len == 0){
-                       fprintf(stderr, "error on line number: %d. Missing number after .FILL\n", line_num);
+                       fprintf(stderr, "error on line number: %d. Missing number after .BLKW\n", line_num);
                        return -1;
                    }
                    char my_offset[name_len+1];
                    memset(my_offset, 0, name_len);
                    memcpy(my_offset, old_ptr, name_len);
                    my_offset[name_len] = '\0';
-                   uint16_t offset = 0;
-                   for(int i = 0; i<name_len; ++i){
-                    if(my_offset[i] == '#') continue;
-                       int mul = 1;
-                       for(int j=0; j<name_len-1-i; ++j){
-                           mul = mul*10;
-                       }
-                       offset = offset + ((my_offset[i]-'0')*mul);
-                   }
+                   int16_t offset = parse_imm(my_offset);
                    addr_counter = addr_counter + offset;
                }
                else if(strcmp(name, ".STRINGZ")==0){
-                   while(*ptr == ' '){
+                   while(*ptr == ' ' || *ptr == '\t'){
                        ptr++;
                    }
                    name_len = 0;
@@ -1450,7 +1412,6 @@ int pass1(SymbolTable *st, FILE *fp){
                    break;
                }
                else{
-                   printf("We have found an opcode\n");
                    addr_counter = addr_counter + 1;
                }
            }
@@ -1466,7 +1427,7 @@ void print_symbol_table(SymbolTable *st){
         printf("%s: ", st->my_symbol[i].label_name);
         uint16_t addr = st->my_symbol[i].label_addr;
         int bits = sizeof(addr)*8;
-        for(int j=bits-1; j>=0; --j){
+        for(int j=bits-1; j>=0; --j){ 
             int bit = (addr>>j)&1;
             printf("%d", bit);
             if(j%4==0){
@@ -1479,12 +1440,11 @@ void print_symbol_table(SymbolTable *st){
 }
 
 int main(int argc, char *argv[]){
-    if(argc == 1){
-        printf("please provide the name of assembly file and .obj file\n");
-        return EXIT_FAILURE;
+    if(argc < 3){
+        fprintf(stdout, "please pass the assembly file name as well as the object file name\n");
     }
     else if(argc > 3){
-        printf("Too many arguments\n");
+        fprintf(stdout, "Too many arguments\n");
     }
     else{
         SymbolTable st;
@@ -1505,7 +1465,7 @@ int main(int argc, char *argv[]){
         char *file_path = argv[2];
         FILE *fp_w = fopen(file_path, "wb");
         if(fp_w == NULL){
-            fprintf(stderr, "some error occurred while opening the file: %s in append mode\n", file_path);
+            fprintf(stderr, "some error occurred while opening the file: %s in write mode\n", file_path);
             fclose(fp_r);
             return EXIT_FAILURE;
         }
@@ -1513,6 +1473,7 @@ int main(int argc, char *argv[]){
         FILE *again_fp_r = fopen(filepath, "r");
         if(again_fp_r == NULL){
             printf("unable to open the file: %s in read mode\n", filepath);
+            fclose(fp_w);
             return EXIT_FAILURE;
         }
         if(pass2(&st, again_fp_r, fp_w) == -1){

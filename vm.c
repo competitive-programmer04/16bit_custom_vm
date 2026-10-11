@@ -81,7 +81,7 @@ uint16_t sign_extend(uint16_t x, uint16_t bit_count){
     return x;
 }
 void set_condition_code(uint16_t reg){
-    registers[psr] = registers[psr]&(~0x7);
+    registers[psr] = registers[psr]&(~(0x7));
     if(reg == 0){
         // psr[0] = P, psr[1] = Z, psr[2] = N
         registers[psr] = registers[psr]|0x2;
@@ -347,6 +347,7 @@ int main(int argc, char *argv[]){
     }
     uint16_t origin;
     read(fd, &origin, sizeof(origin));
+    origin = (origin>>8)|(origin<<8);
     if(origin >= MAX_USR_SPACE){
         fprintf(stderr, "user space limit crossed\n");
         return 1;
@@ -354,15 +355,16 @@ int main(int argc, char *argv[]){
     ssize_t max_space_left = (MAX_USR_SPACE - origin)*2;
     ssize_t read_bytes = 0;
     size_t idx = 0;
-    while(read_bytes <= max_space_left){
+    while(read_bytes < max_space_left){
         ssize_t num_read = read(fd, &memory[origin+idx] , sizeof(memory[origin+idx]));
         if(num_read == 0){
             break; // we reached EOF
         }
+        memory[origin+idx] = (memory[origin+idx]>>8)|(memory[origin+idx]<<8);
         read_bytes = read_bytes + num_read;
         idx++;
     }
-    
+    close(fd);
     disable_input_buffering();
     atexit(enable_input_buffering);
 
