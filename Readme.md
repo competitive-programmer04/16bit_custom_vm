@@ -17,9 +17,6 @@ A complete, from-scratch project implementing the **LC-3 (Little Computer 3)** a
 - [Instruction Set Reference](#instruction-set-reference)
 - [Building the Project](#building-the-project)
 - [Usage & Workflow](#usage--workflow)
-  - [1. Write Assembly Code](#1-write-assembly-code)
-  - [2. Assemble to Machine Code](#2-assemble-to-machine-code)
-  - [3. Run the Virtual Machine](#3-run-the-virtual-machine)
 - [References & Acknowledgments](#references--acknowledgments)
 - [License](#license)
 
