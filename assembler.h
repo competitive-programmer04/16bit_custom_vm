@@ -20,6 +20,8 @@ int add_symbol(SymbolTable *symbol, char *name, uint16_t addr);
 int check_symbol(SymbolTable *symbol, char *name);
 void print_symbol_table(SymbolTable *symbol);
 int pass1(SymbolTable *symbol, FILE *file);
-int parse_reg(char *str);
-int parse_imm(char *str, int *out_val);
+uint16_t parse_reg(char *str);
+int16_t parse_imm(char *str);
+uint16_t encode_instruction(const char *opcode, char *args, uint16_t current_pc, SymbolTable *st, uint16_t line_num);
+int pass2(SymbolTable *st, FILE *fp_r, FILE *fp_w);
 #endif

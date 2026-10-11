@@ -305,6 +305,7 @@ void fetch_decode_execute(){
                        len++;
                    }
                    write(STDOUT_FILENO, mesg, len+1);
+                   running = 0;
                    break;
               }
             }
@@ -346,20 +347,18 @@ int main(int argc, char *argv[]){
     }
     uint16_t origin;
     read(fd, &origin, sizeof(origin));
-    origin = ((origin << 8)|(origin >> 8));
     if(origin >= MAX_USR_SPACE){
         fprintf(stderr, "user space limit crossed\n");
         return 1;
     }
-    size_t max_space_left = (MAX_USR_SPACE - origin)*2;
-    size_t read_bytes = 0;
+    ssize_t max_space_left = (MAX_USR_SPACE - origin)*2;
+    ssize_t read_bytes = 0;
     size_t idx = 0;
     while(read_bytes <= max_space_left){
-        size_t num_read = read(fd, &memory[origin+idx] , sizeof(memory[origin+idx]));
+        ssize_t num_read = read(fd, &memory[origin+idx] , sizeof(memory[origin+idx]));
         if(num_read == 0){
             break; // we reached EOF
         }
-        memory[origin+idx] = ((memory[origin+idx] << 8)|(memory[origin+idx] >> 8)); // converting big-endian to little endian
         read_bytes = read_bytes + num_read;
         idx++;
     }

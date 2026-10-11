@@ -10,22 +10,22 @@
 
 // defining opcodes -> 4bits
 enum{
-    OP_BR = 0, // branch
-    OP_ADD = 1, // add
-    OP_LD = 2, // load direct
-    OP_ST = 3, // store direct
-    OP_JSR = 4, 
-    OP_AND = 5, // and 
-    OP_LDR = 6, // load direct + offset
-    OP_STR = 7, // store direct + offset
-    OP_RTI = 8, // privleged instruction
-    OP_NOT = 9, // not
-    OP_LDI = 10, // load indirect
-    OP_STI = 11, // store indirect
-    OP_JMP = 12,
-    OP_ILL = 13, // illegal opcode
-    OP_LEA = 14, // load effective address
-    OP_TRAP = 15 // trap
+    OP_BR = 0x0, // branch
+    OP_ADD = 0x1, // add
+    OP_LD = 0x2, // load direct
+    OP_ST = 0x3, // store direct
+    OP_JSR = 0x4, 
+    OP_AND = 0x5, // and 
+    OP_LDR = 0x6, // load direct + offset
+    OP_STR = 0x7, // store direct + offset
+    OP_RTI = 0x8, // privleged instruction
+    OP_NOT = 0x9, // not
+    OP_LDI = 0xA, // load indirect
+    OP_STI = 0xB, // store indirect
+    OP_JMP = 0xC,
+    OP_ILL = 0xD, // illegal opcode
+    OP_LEA = 0xE, // load effective address
+    OP_TRAP = 0xF // trap
 };
 
 // defining registers
